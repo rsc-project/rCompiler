@@ -18,6 +18,8 @@ class rsc {
         rscStorage = jsonData.extensionStorage.rsc;
     const notRepeatCloneList = rscStorage?.project?.notRepeatCloneList?.split(',');
     let extrablocks = [];
+    var structs = [];
+    var funcs = [];
     var out = '';
     let targetID = -1;
     var compileEvents = [
@@ -107,6 +109,7 @@ class rsc {
     var isclone = false;
     var hasreturn = false;
     var hasCommandBlock = false;
+    var selfmut = false;
     var clonevarlist = [];
     var rscfunc = '';
     var globalextrablocks = [];
@@ -429,67 +432,55 @@ class rsc {
         Num() {
           const varin = this.input;
           if (globalvarlist.includes(varin)) {
-            Tools.setruntime([`fn get_global_num_${varin}() -> f64 {\nlet globalvar = *GLOBAL_NUM_${varin}.lock().unwrap();\nglobalvar\n}`]);
-            return `get_global_num_${varin}()`;
+            return `*self.vf_${varin}.lock().unwrap()`;
           }
           else {
-            Tools.setruntime([`fn get_${targetID}_num_${varin}() -> f64 {\nlet globalvar = *_${targetID}_NUM_${varin}.lock().unwrap();\nglobalvar\n}`]);
-            return `get_${targetID}_num_${varin}()`;
+            return `*self.vf_${targetID}_${varin}.lock().unwrap()`;
           }
         }
         Usize() {
           const varin = this.input;
           if (globalvarlist.includes(varin)) {
-            Tools.setruntime([`fn get_global_num_${varin}() -> f64 {\nlet globalvar = *GLOBAL_NUM_${varin}.lock().unwrap();\nglobalvar\n}`]);
-            return `get_global_num_${varin}() as usize`;
+            return `*self.vf_${varin}.lock().unwrap() as usize`;
           }
           else {
-            Tools.setruntime([`fn get_${targetID}_num_${varin}() -> f64 {\nlet globalvar = *_${targetID}_NUM_${varin}.lock().unwrap();\nglobalvar\n}`]);
-            return `get_${targetID}_num_${varin}() as usize`;
+            return `*self.vf_${targetID}_${varin}.lock().unwrap() as usize`;
           }
         }
         i32() {
           const varin = this.input;
           if (globalvarlist.includes(varin)) {
-            Tools.setruntime([`fn get_global_num_${varin}() -> f64 {\nlet globalvar = *GLOBAL_NUM_${varin}.lock().unwrap();\nglobalvar\n}`]);
-            return `get_global_num_${varin}() as i32`;
+            return `*self.vf_${varin}.lock().unwrap() as i32`;
           }
           else {
-            Tools.setruntime([`fn get_${targetID}_num_${varin}() -> f64 {\nlet globalvar = *_${targetID}_NUM_${varin}.lock().unwrap();\nglobalvar\n}`]);
-            return `get_${targetID}_num_${varin}() as i32`;
+            return `*self.vf_${targetID}_${varin}.lock().unwrap() as i32`;
           }
         }
         Str() {
           const varin = this.input;
           if (globalvarlist.includes(varin)) {
-            Tools.setruntime([`fn get_global_str_${varin}() -> String {\nlet globalvar = GLOBAL_STR_${varin}.lock().unwrap().clone();\nglobalvar\n}`]);
-            return `*get_global_str_${varin}()`;
+            return `**self.vs_${varin}.lock().unwrap()`;
           }
           else {
-            Tools.setruntime([`fn get_${targetID}_str_${varin}() -> String {\nlet globalvar = _${targetID}_STR_${varin}.lock().unwrap().clone();\nglobalvar\n}`]);
-            return `*get_${targetID}_str_${varin}()`;
+            return `**self.vs_${targetID}_${varin}.lock().unwrap()`;
           }
         }
         Stri() {
           const varin = this.input;
           if (globalvarlist.includes(varin)) {
-            Tools.setruntime([`fn get_global_str_${varin}() -> String {\nlet globalvar = GLOBAL_STR_${varin}.lock().unwrap().clone();\nglobalvar\n}`]);
-            return `get_global_str_${varin}()`;
+            return `*self.vs_${varin}.lock().unwrap()`;
           }
           else {
-            Tools.setruntime([`fn get_${targetID}_str_${varin}() -> String {\nlet globalvar = _${targetID}_STR_${varin}.lock().unwrap().clone();\nglobalvar\n}`]);
-            return `get_${targetID}_str_${varin}()`;
+            return `*self.vs_${targetID}_${varin}.lock().unwrap()`;
           }
         }
         Stu() {
           const varin = this.input;
           if (globalvarlist.includes(varin)) {
-            Tools.setruntime([`fn get_global_str_${varin}() -> String {\nlet globalvar = GLOBAL_STR_${varin}.lock().unwrap().clone();\nglobalvar\n}`]);
-            return `get_global_str_${varin}()`;
+            return `*self.vs_${varin}.lock().unwrap()`;
           }
           else {
-            Tools.setruntime([`fn get_${targetID}_str_${varin}() -> String {\nlet globalvar = _${targetID}_STR_${varin}.lock().unwrap().clone();\nglobalvar\n}`]);
-            return `get_${targetID}_str_${varin}()`;
+            return `*self.vs_${targetID}_${varin}.lock().unwrap()`;
           }
         }
       }
@@ -833,7 +824,7 @@ class rsc {
         ])
         return new TypeInput.Num(`numround(${args.NUM.Num()})`);
       },
-      'operator_mathop'(args) {
+      'operator_mathop'(argfs) {
         if (args.scope.block.fields.OPERATOR[0] == 'abs') {
           Tools.setruntime([`fn numabs(s: f64) -> f64 {\ns.abs()\n}`
           ])
@@ -940,14 +931,14 @@ class rsc {
           comp = compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
         }
         if (rscStorage?.project?.UnuseTokio)
-          args.compiler += `fn flag${flagcount}(){${inuselist.length == 0 ? '' : '\n'}${inuselist.join('\n') + '\n'}`;
+          args.compiler += `fn flag${flagcount}(${selfmut ? 'mut self' : '&self'}){${inuselist.length == 0 ? '' : '\n'}${inuselist.join('\n') + '\n'}`;
         else
-          args.compiler += `async fn flag${flagcount}(){${inuselist.length == 0 ? '' : '\n'}${inuselist.join('\n') + '\n'}`;
+          args.compiler += `async fn flag${flagcount}(${selfmut ? 'mut self' : '&self'}){${inuselist.length == 0 ? '' : '\n'}${inuselist.join('\n') + '\n'}`;
         if (comp != '') {
           args.compiler += comp;
         }
         args.compiler += '}\n';
-        out += args.compiler;
+        funcs.push(args.compiler);
         return args.compiler;
       },
       'procedures_definition'(args) {
@@ -1191,7 +1182,7 @@ class rsc {
           `let start_time = Instant::now();`,
           `Timer { start_time }`,
           `}`,
-          `fn get_timer(&self) -> f64 {`,
+          `fn get_timer(mut self) -> f64 {`,
           `let current_time = Instant::now();`,
           `let elapsed_time = current_time.duration_since(self.start_time);`,
           `let seconds_with_fraction = elapsed_time.as_secs_f64();`,
@@ -1546,53 +1537,52 @@ class rsc {
     function getvar(varname, varid) {
       if (noglobalvarids.includes(varid)) {
         if (isclone) {
-          Tools.setruntime([`fn get_${targetID}_str_${varname}() -> String {\nlet globalvar = _${targetID}_STR_${varname}.lock().unwrap().clone();\nglobalvar\n}`]);
-          Tools.setclonevar([`let mut _str_${varname} = get_${targetID}_str_${varname}();`, `let mut _num_${varname} = *_${targetID}_NUM_${varname}.lock().unwrap();`]);
+          Tools.setclonevar([`let mut _str_${varname} = self.vs_${targetID}_${varname}.lock().unwrap().clone();`, `let mut _num_${varname} = *self.vf_${targetID}_${varname}.lock().unwrap();`]);
           return { str: `_str_${varname}`, num: `_num_${varname}` };
         }
         else {
-          return { str: `*_${targetID}_STR_${varname}.lock().unwrap()`, num: `*_${targetID}_NUM_${varname}.lock().unwrap()` };
+          return { str: `*self.vs_${targetID}_${varname}.lock().unwrap()`, num: `*self.vf_${targetID}_${varname}.lock().unwrap()` };
         }
       }
       else {
-        return { str: `*GLOBAL_STR_${varname}.lock().unwrap()`, num: `*GLOBAL_NUM_${varname}.lock().unwrap()` };
+        return { str: `*self.vs_${varname}.lock().unwrap()`, num: `*self.vf_${varname}.lock().unwrap()` };
       }
     }
     function compile_main() {
-      var fn = '';
+      var fn = `struct Default{\n${structs.map(item => item[0] + ':' + item[1]).join(',\n')}\n}\n`;
+      fn += `impl Default{\nfn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n')}\n}\n}\n${funcs.join('\n')}}\n`;
       if (flagcount == 0) {
         fn += `fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}}`;
       }
       else if (flagcount == 1) {
         if (rscStorage?.project?.UnuseTokio)
-          fn += `fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}flag1();\n}`;
+          fn += `fn main(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}init.flag1();\n}`;
         else {
           Tools.setdepend([`tokio = { version = "1", features = ["full"] }`]);
-          fn += `#[tokio::main]\nasync fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}flag1().await;\n}`;
+          fn += `#[tokio::main]\nasync fn main(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}init.flag1().await;\n}`;
         }
       }
       else {
         if (rscStorage?.project?.UnuseTokio) {
-          fn += `fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
+          fn += `fn main(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
           let i = -1;
           starteventlist.forEach(function (info) {
             i++;
-            fn += `${info}();\n`;
+            fn += `init.${info}();\n`;
           });
           fn += '}';
         }
         else {
           Tools.setdepend([`tokio = { version = "1", features = ["full"] }`]);
-          fn += `#[tokio::main]\nasync fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
+          fn += `#[tokio::main]\nasync fn main(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
           let tasks = [];
           let i = -1;
           starteventlist.forEach(function (info) {
             i++;
-            tasks.push(info + 'task');
-            fn += `let ${info}task=tokio::spawn(${info}());\n`;
+            tasks.push('init.'+info+'()');
           });
           let task = tasks.join(',');
-          fn += `tokio::try_join!(${task}).unwrap();\n`
+          fn += `tokio::join!(${task});\n`
           fn += '}';
         }
       }
@@ -1605,30 +1595,28 @@ class rsc {
         if (JSON.stringify(vars) == '{}' && JSON.stringify(lists) == '{}') {
           return;
         }
-        Tools.setdepend(['lazy_static = "1.4"']);
-        Tools.setlibrary(['use std::sync::Mutex;', 'use lazy_static::lazy_static;']);
-        let statics = ['lazy_static! {'];
+        Tools.setlibrary(['use std::sync::Mutex;']);
         for (const key in vars) {
           const variableName = Cast.keywordunParse(vars[key][0]);
           const variableContent = vars[key][1];
           if (element == 0) {
             if (typeof variableContent == 'number') {
-              statics.push(`static ref GLOBAL_NUM_${variableName}: Mutex<f64> = Mutex::new(${Cast.toNum(variableContent)});`);
+              structs.push(['vf_' + variableName, 'Mutex<f64>', `Mutex::new(${Cast.toNum(variableContent)})`]);
             }
             else {
-              statics.push(`static ref GLOBAL_NUM_${variableName}: Mutex<f64> = Mutex::new(0.0);`);
+              structs.push(['vf_' + variableName, 'Mutex<f64>', 'Mutex::new(0.0)']);
             }
-            statics.push(`static ref GLOBAL_STR_${variableName}: Mutex<String> = Mutex::new((${Cast.unParse(variableContent)}).to_string());`);
+            structs.push(['vs_' + variableName, 'Mutex<String>', `Mutex::new((${Cast.unParse(variableContent)}).to_string())`]);
             globalvarlist.push(variableName);
           }
           else {
             if (typeof variableContent == 'number') {
-              statics.push(`static ref _${element}_NUM_${variableName}: Mutex<f64> = Mutex::new(${Cast.toNum(variableContent)});`);
+              structs.push(['vf_' + element + '_' + variableName, 'Mutex<f64>', `Mutex::new(${Cast.toNum(variableContent)})`]);
             }
             else {
-              statics.push(`static ref _${element}_NUM_${variableName}: Mutex<f64> = Mutex::new(0.0);`);
+              structs.push(['vf_' + element + '_' + variableName, 'Mutex<f64>', 'Mutex::new(0.0)']);
             }
-            statics.push(`static ref _${element}_STR_${variableName}: Mutex<String> = Mutex::new((${Cast.unParse(variableContent)}).to_string());`);
+            structs.push(['vs_' + element + '_' + variableName, 'Mutex<String>', `Mutex::new((${Cast.unParse(variableContent)}).to_string())`]);
             noglobalvarids.push(key);
             noglobalvarlist.push(variableName);
           }
@@ -1642,17 +1630,15 @@ class rsc {
             listfor.push(Cast.toStr(Cast.unParse(listContent[keyin])));
           }
           if (element == 0) {
-            statics.push(`static ref GLOBAL_LIST_${listName}: Mutex<Vec<&'static str>> = Mutex::new(vec![${listfor.join(',')}]);`);
+            structs.push(`static ref GLOBAL_LIST_${listName}: Mutex<Vec<&'static str>> = Mutex::new(vec![${listfor.join(',')}]);`);
           }
           else {
-            statics.push(`static ref _${element}_LIST_${listName}: Mutex<Vec<&'static str>> = Mutex::new(vec![${listfor.join(',')}]);`);
+            structs.push(`static ref _${element}_LIST_${listName}: Mutex<Vec<&'static str>> = Mutex::new(vec![${listfor.join(',')}]);`);
             nogloballistids.push(key);
             noglobalvarlist.push(listName);
           }
         }
-        statics.push('}');
         if (listadds.length != 0) Tools.setmain([listadds.join('\n')]);
-        if (statics.length != 0) Tools.setruntime([statics.join('\n')]);
       }
       jsonData.targets.forEach((_, index) => {
         find(index);
