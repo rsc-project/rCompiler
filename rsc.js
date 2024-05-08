@@ -123,6 +123,7 @@ class rsc {
     var usingvars = {};
     var usedvars = [];
     var structnames = [];
+    var haverscfunc = false;
     var Tools = {
       setlibrary(library) {
         const itemsToAdd = library;
@@ -680,7 +681,7 @@ class rsc {
           return keywordonlys[parsed];
         else {
           keywordonlys[parsed] = crc32(parsed);
-          return keywords[parsed];
+          return keywordonlys[parsed];
         }
       },
       Safe(str) {
@@ -870,11 +871,15 @@ class rsc {
         }
       },
       'rsc_user'(args) {
-        const from = args.scope.block.fields.from[0];
+        const name = args.scope.block.fields.from[0];
         const hsm = args.scope.block.fields.hsm[0];
         const Args = Object.keys(args).filter(key => key.startsWith("ADD")).map(key => args[key].Stri());
-        if (from != '') return new TypeInput.Stri(`${from}::procpub${Cast.keywordOnly(hsm)}(${Args.join(',')})`);
-        else return new TypeInput.Stri(`procpub${Cast.keywordOnly(hsm)}(${Args.join(',')})`);
+        if (name != '') {
+          const from = 'm_' + Cast.keywordunParse(name);
+          Tools.setstruct([[from, `${args.scope.block.fields.from[0]}::Default`, `${args.scope.block.fields.from[0]}::Default::new()`]]);
+          return new TypeInput.Stri(`self.${from}.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')})`);
+        }
+        else return new TypeInput.Stri(`self.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')})`);
       },
       'rsc_compilerversion'(args) {//编译器版本
         return new TypeInput.Num(new rsc().version());
@@ -1000,7 +1005,7 @@ class rsc {
           else
             block_opcodes.push('_' + custom_block[key] + ': ' + proctypelist[i]);
         })
-        if (rscfunc != '') {
+        if (rscfunc) {
           procpublist.push(`proc${proccount}`);
           procpubrealnamelist.push(`procpub${rscfunc}`);
         }
@@ -1406,7 +1411,7 @@ class rsc {
             const jsonpath = mod + '.json'
             const jsondata = fs.readFileSync(jsonpath);
             const { deplist, globalextrablocks } = new rsc().compile(jsondata, folderPath, path.parse(jsonpath).name, iflog);
-            Tools.setextrablockcompile(globalextrablocks);
+            Tools.setextrablockcompile(globalextrablocks);//feat-编辑器内自定义扩展积木
             Tools.setdepend(deplist);
           }
           else if (fs.existsSync(mod + '.sb3')) {
@@ -1423,7 +1428,6 @@ class rsc {
                 return;
               if (!ext.id)
                 return;
-              globalextrablocks.push(ext);
               ext.blocks.forEach(block => {
                 if (block.blockType != 'u') {
                   const func = ext[block.opcode];
@@ -1477,14 +1481,19 @@ class rsc {
       },
       'rsc_func'(args) {
         rscfunc = Cast.keywordOnly(args.scope.block.fields.HEADER[0]);
+        haverscfunc = true;
         return args.compiler;
       },
       'rsc_use'(args) {
-        const from = args.scope.block.fields.from[0];
+        const name = args.scope.block.fields.from[0];
         const hsm = args.scope.block.fields.hsm[0];
         const Args = Object.keys(args).filter(key => key.startsWith("ADD")).map(key => args[key].Stri());
-        if (from != '') args.compiler += `${from}::procpub${Cast.keywordOnly(hsm)}(${Args.join(',')});\n`;
-        else args.compiler += `procpub${Cast.keywordOnly(hsm)}(${Args.join(',')});\n`;
+        if (name != '') {
+          const from = 'm_' + Cast.keywordunParse(name);
+          Tools.setstruct([[from, `${args.scope.block.fields.from[0]}::Default`, `${args.scope.block.fields.from[0]}::Default::new()`]]);
+          args.compiler += `self.${from}.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')});\n`;
+        }
+        else args.compiler += `self.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')});\n`;
         return args.compiler;
       },
       'rsc_setmain'(args) {
@@ -1619,8 +1628,8 @@ class rsc {
       }
     }
     function compile_main() {
-      var fn = `struct Default{\n${structs.map(item => item[0] + ':' + item[1]).join(',\n')}\n}\n`;
-      fn += `impl Default{\nfn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n')}\n}\n}\n${funcs.join('\n')}}\n`;
+      var fn = `${haverscfunc ? 'pub ' : ''}struct Default{\n${structs.map(item => item[0] + ':' + item[1]).join(',\n')}\n}\n`;
+      fn += `impl Default{\n${haverscfunc ? 'pub ' : ''}fn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n')}\n}\n}\n${funcs.join('\n')}}\n`;
       if (flagcount == 0) {
         fn += `fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}}`;
       }
