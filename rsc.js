@@ -122,6 +122,7 @@ class rsc {
     var diagnosis = '';
     var usingvars = {};
     var usedvars = [];
+    var structnames = [];
     var Tools = {
       setlibrary(library) {
         const itemsToAdd = library;
@@ -160,6 +161,15 @@ class rsc {
         itemsToAdd.forEach(item => {
           if (!funcs.includes(item)) {
             funcs.push(item);
+          }
+        });
+      },
+      setstruct(struct) {
+        const itemsToAdd = struct;
+        itemsToAdd.forEach(item => {
+          if (!structnames.includes(item[0])) {
+            structs.push(item);
+            structnames.push(item[0]);
           }
         });
       },
@@ -689,15 +699,9 @@ class rsc {
     }
     const inputscompiles = {
       'sensing_answer'(args) {
-        Tools.setdepend(['lazy_static = "1.4"']);
-        Tools.setlibrary(['use std::io;', 'use std::io::Write;', 'use std::sync::Mutex;', 'use lazy_static::lazy_static;']);
-        Tools.setruntime([
-          [
-            'lazy_static! {',
-            'static ref SENSING_ANSWER: Mutex<String> = Mutex::new(String::new());',
-            '}'
-          ].join('\n')]);
-        return new TypeInput.Stri('SENSING_ANSWER.lock().unwrap().clone()');
+        Tools.setlibrary(['use std::io;', 'use std::io::Write;', 'use std::sync::Mutex;']);
+        Tools.setstruct([['sensing_answer', "Mutex<String>", `Mutex::new(String::new())`]]);
+        return new TypeInput.Stri('&self.sensing_answer.lock().unwrap().clone()');
       },
       'operator_equals'(args) {
         return new TypeInput.Bool('(' + args.OPERAND1.Stri() + '==' + args.OPERAND2.Stri() + ')');
@@ -1177,20 +1181,13 @@ class rsc {
         return args.compiler;
       },
       'sensing_askandwait'(args) {
-        Tools.setdepend(['lazy_static = "1.4"']);
-        Tools.setlibrary(['use std::io;', 'use std::io::Write;', 'use std::sync::Mutex;', 'use lazy_static::lazy_static;']);
-        Tools.setruntime([
-          [
-            'lazy_static! {',
-            'static ref SENSING_ANSWER: Mutex<String> = Mutex::new(String::new());',
-            '}'
-          ].join('\n')]);
+        Tools.setstruct([['sensing_answer', "Mutex<String>", `Mutex::new(String::new())`]]);
         args.compiler += `print!("{}",${args.QUESTION.Stu()});\n`;
         args.compiler += `print!("\\n");\n`
         args.compiler += `io::stdout().flush().unwrap();\n`;
         args.compiler += `let mut sensing_answer = String::new();\n`;
         args.compiler += `io::stdin().read_line(&mut sensing_answer).unwrap();\n`;
-        args.compiler += `*SENSING_ANSWER.lock().unwrap() = sensing_answer.trim().to_owned();\n`;
+        args.compiler += `*self.sensing_answer.lock().unwrap() = sensing_answer.trim().to_owned();\n`;
         return args.compiler;
       },
       'looks_say'(args) {
