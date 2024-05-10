@@ -1,8 +1,11 @@
 // Lingba Saner 🍥 24502-*
-const fs = require('fs');
-const path = require('path');
-const AdmZip = require('adm-zip');
+const isLocal = typeof window === 'undefined';
 const crc32 = require('crc32');
+if (isLocal) {
+  var fs = require('fs');
+  var AdmZip = require('adm-zip');
+  var path = require('path');
+}
 
 class rsc {
   version() {
@@ -124,6 +127,7 @@ class rsc {
     var usedvars = [];
     var structnames = [];
     var haverscfunc = false;
+    var reqlist = [];
     var Tools = {
       setlibrary(library) {
         const itemsToAdd = library;
@@ -171,6 +175,14 @@ class rsc {
           if (!structnames.includes(item[0])) {
             structs.push(item);
             structnames.push(item[0]);
+          }
+        });
+      },
+      setreq(req) {
+        const itemsToAdd = req;
+        itemsToAdd.forEach(item => {
+          if (!reqlist.includes(item[0])) {
+            reqlist.push(item);
           }
         });
       },
@@ -240,7 +252,7 @@ class rsc {
           throw new Error(err)
         }
         if (rscStorage?.config?.AllowThis)
-          ext.call({ rsc: this, require, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+          ext.call({ rsc: this, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
         else
           ext.call({ TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
       }
@@ -928,7 +940,7 @@ class rsc {
         ])
         return new TypeInput.Num(`numround(${args.NUM.Num()})`);
       },
-      'operator_mathop'(argfs) {
+      'operator_mathop'(args) {
         if (args.scope.block.fields.OPERATOR[0] == 'abs') {
           Tools.setruntime([`fn numabs(s: f64) -> f64 {\ns.abs()\n}`
           ])
@@ -941,7 +953,7 @@ class rsc {
         const Args = Object.keys(args).filter(key => key.startsWith("ADD")).map(key => args[key].Stri());
         if (name != '') {
           const from = 'm_' + Cast.keywordunParse(name);
-          Tools.setstruct([[from, `${args.scope.block.fields.from[0]}::Default`, `${args.scope.block.fields.from[0]}::Default::new()`]]);
+          Tools.setstruct([[from, `md_${Cast.keywordunParse(args.scope.block.fields.from[0])}`, `md_${Cast.keywordunParse(args.scope.block.fields.from[0])}::new()`]]);
           return new TypeInput.Stri(`self.${from}.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')})`);
         }
         else return new TypeInput.Stri(`self.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')})`);
@@ -1489,80 +1501,131 @@ class rsc {
         args.compiler += fn;
         return args.compiler;
       },
-      'rsc_import'(args) {
+      rsc_import: isLocal ? (args) => {
         const mod = args.scope.block.fields.HEADER[0];
-        if (mod != '') {
-          if (fs.existsSync(mod + '.json')) {
-            Tools.setlibrary([`mod ${mod};`]);
-            const jsonpath = mod + '.json'
-            const jsondata = fs.readFileSync(jsonpath);
-            const { deplist, globalextrablocks } = new rsc().compile(jsondata, folderPath, path.parse(jsonpath).name, iflog);
-            Tools.setextrablockcompile(globalextrablocks);//feat-编辑器内自定义扩展积木
-            Tools.setdepend(deplist);
-          }
-          else if (fs.existsSync(mod + '.sb3')) {
-            const zipFilePath = mod + '.sb3';
-            Tools.setlibrary([`mod ${mod};`]);
-            const jsondata = rf(zipFilePath);
-            const { deplist, globalextrablocks } = new rsc().compile(jsondata, folderPath, path.parse(zipFilePath).name, iflog);
-            Tools.setextrablockcompile(globalextrablocks);
-            Tools.setdepend(deplist);
-          }
-          else if (fs.existsSync(mod + '.js')) {
-            const register = (ext) => {
-              if (!ext.blocks)
-                return;
-              if (!ext.id)
-                return;
-              ext.blocks.forEach(block => {
-                if (block.blockType != 'u') {
-                  const func = ext[block.opcode];
-                  const opcode = ext.id + '_' + block.opcode;
-                  const type = block.blockType;
-                  const startornot = block.blockStart;
-                  extrablocks.push(opcode);
-                  if (block.isOperator) {
-                    operatorlist.push(opcode);
-                  }
-                  switch (type) {
-                    case 'm': {
-                      compiles[opcode] = func;
-                      break;
-                    }
-                    case 'r': {
-                      inputscompiles[opcode] = func;
-                      inputlist.push(opcode);
-                      break;
-                    }
-                  }
-                  if (startornot)
-                    compileEvents.push(opcode);
-                }
-              });
+        function requireSb3(zipFilePath) {
+          try {
+            const data = fs.readFileSync(zipFilePath);
+            const zip = new AdmZip(data);
+            const projectJsonEntry = zip.getEntry('project.json');
+
+            if (!projectJsonEntry) {
+              throw new Error('不是有效的Scratch项目文件');
             }
-            const BlockType = {
-              COMMAND: 'm',
-              CONDITIONAL: 'm',
-              LOOP: 'm',
-              HAT: 'm',
-              REPORTER: 'r',
-              BOOLEAN: 'r',
-              LABEL: 'u',
-              XML: 'u',
-              BUTTON: 'u'
-            };
-            const extensions = { register };
-            const isCompiler = true;
-            const ext = new Function(fs.readFileSync(mod + '.js').toString());
-            const ThrowError = (err) => {
-              throw new Error(err)
-            }
-            if (rscStorage?.config?.AllowThis)
-              ext.call({ rsc: this, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
-            else
-              ext.call({ TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+
+            const projectJsonContent = projectJsonEntry.getData().toString('utf-8');
+            const projectJson = JSON.parse(projectJsonContent);
+            return projectJson;
+          } catch (error) {
+            throw error;
           }
         }
+        function pathtoMod(pathto) {
+          if (pathto.startsWith('./')) {
+            return pathto.slice(2, pathto.length).replace('/', '::');
+          }
+          if (pathto.startsWith('.') || pathto.endsWith('/') || pathto.endsWith('.sb3') || pathto.endsWith('.rs') || pathto.endsWith('.json') || pathto.endsWith('.js'))
+            throw new Error('引入地址错误');
+          let before = pathto.substring(0, pathto.indexOf('/'));
+          before = 'super::'.repeat(before.split('.').length - 2);
+          let after = pathto.substring(pathto.indexOf('/') + 1);
+          after = after.replace('/', '::');
+          const final = before + after;
+          Tools.setreq([final.slice(7, final.length)]);
+          return final;
+        }
+        function requireLibs(name) {
+          if (name.includes('/')) {
+            const modpath = pathtoMod(name);
+            if (fs.existsSync(name + '.json')) {
+              Tools.setlibrary([`mod ${modpath};`]);
+              Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
+              const jsonpath = name + '.json'
+              const jsondata = fs.readFileSync(jsonpath);
+              const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(jsonpath).name, iflog);
+              let toreq = [];
+              reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
+              Tools.setreq(toreq);
+              Tools.setlibrary(reqlist);
+              Tools.setextrablockcompile(globalextrablocks);//feat-编辑器内自定义扩展积木
+              Tools.setdepend(deplist);
+            }
+            else if (fs.existsSync(name + '.sb3')) {
+              const zipFilePath = name + '.sb3';
+              Tools.setlibrary([`mod ${modpath};`]);
+              Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
+              const jsondata = requireSb3(zipFilePath);
+              const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(zipFilePath).name, iflog);
+              let toreq = [];
+              reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
+              Tools.setreq(toreq);
+              Tools.setlibrary(reqlist);
+              Tools.setextrablockcompile(globalextrablocks);
+              Tools.setdepend(deplist);
+            }
+            else if (fs.existsSync(name + '.js')) {
+              const register = (ext) => {
+                if (!ext.blocks)
+                  return;
+                if (!ext.id)
+                  return;
+                ext.blocks.forEach(block => {
+                  if (block.blockType != 'u') {
+                    const func = ext[block.opcode];
+                    const opcode = ext.id + '_' + block.opcode;
+                    const type = block.blockType;
+                    const startornot = block.blockStart;
+                    extrablocks.push(opcode);
+                    if (block.isOperator) {
+                      operatorlist.push(opcode);
+                    }
+                    switch (type) {
+                      case 'm': {
+                        compiles[opcode] = func;
+                        break;
+                      }
+                      case 'r': {
+                        inputscompiles[opcode] = func;
+                        inputlist.push(opcode);
+                        break;
+                      }
+                    }
+                    if (startornot)
+                      compileEvents.push(opcode);
+                  }
+                });
+              }
+              const BlockType = {
+                COMMAND: 'm',
+                CONDITIONAL: 'm',
+                LOOP: 'm',
+                HAT: 'm',
+                REPORTER: 'r',
+                BOOLEAN: 'r',
+                LABEL: 'u',
+                XML: 'u',
+                BUTTON: 'u'
+              };
+              const extensions = { register };
+              const isCompiler = true;
+              const ext = new Function(fs.readFileSync(name + '.js').toString());
+              const ThrowError = (err) => {
+                throw new Error(err)
+              }
+              if (rscStorage?.config?.AllowThis)
+                ext.call({ rsc: this, fs, AdmZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+              else
+                ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+            }
+          }
+          else {
+            //feat-扩展仓库
+          }
+        }
+        requireLibs(mod);
+        return args.compiler;
+      } : () => {
+        //feat-扩展仓库
         return args.compiler;
       },
       'rsc_func'(args) {
@@ -1576,7 +1639,7 @@ class rsc {
         const Args = Object.keys(args).filter(key => key.startsWith("ADD")).map(key => args[key].Stri());
         if (name != '') {
           const from = 'm_' + Cast.keywordunParse(name);
-          Tools.setstruct([[from, `${args.scope.block.fields.from[0]}::Default`, `${args.scope.block.fields.from[0]}::Default::new()`]]);
+          Tools.setstruct([[from, `md_${Cast.keywordunParse(args.scope.block.fields.from[0])}`, `md_${Cast.keywordunParse(args.scope.block.fields.from[0])}::new()`]]);
           args.compiler += `self.${from}.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')});\n`;
         }
         else args.compiler += `self.procpub${Cast.keywordOnly(hsm)}(${Args.join(',')});\n`;
@@ -2104,37 +2167,23 @@ class rsc {
       }
       return;
     }
-    function createDirectory(path) {
-      if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
-    }
-    function rf(zipFilePath) {
-      try {
-        const data = fs.readFileSync(zipFilePath);
-        const zip = new AdmZip(data);
-        const projectJsonEntry = zip.getEntry('project.json');
-
-        if (!projectJsonEntry) {
-          throw new Error('不是有效的Scratch项目文件');
+    if (isLocal) {
+      function createDirectory(path) {
+        if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true });
+      }
+      createDirectory(folderPath);
+      out = `// By r-Scratch-Compiler ${new Date().toISOString()} 🍥 v${new rsc().version()}-${new rsc().compilertype()}\n` + out;
+      fs.writeFile(path.join(folderPath, fileName + '.rs'), out, (err) => {
+        if (err) {
+          console.error('无法写入文件：', err);
         }
-
-        const projectJsonContent = projectJsonEntry.getData().toString('utf-8');
-        const projectJson = JSON.parse(projectJsonContent);
-        return projectJson;
-      } catch (error) {
-        throw error;
-      }
+      });
     }
-    createDirectory(folderPath);
-    out = `// By r-Scratch-Compiler ${new Date().toISOString()} 🍥 v${new rsc().version()}-${new rsc().compilertype()}\n` + out;
-    fs.writeFile(path.join(folderPath, fileName + '.rs'), out, (err) => {
-      if (err) {
-        console.error('无法写入文件：', err);
-      }
-    });
     if (iflog)
       console.log(out);
     if (diagnosis) console.log(diagnosis);
-    return { deplist, globalextrablocks, out };
+    return { deplist, globalextrablocks, out, reqlist };
   }
 }
+if (!isLocal) window.rsc = rsc;
 module.exports = rsc;
