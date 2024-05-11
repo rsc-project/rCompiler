@@ -11,7 +11,8 @@ module.exports = {
     externals: {
         'adm-zip': 'adm-zip',
         'fs': 'fs',
-        'path': 'path'
+        'path': 'path',
+        'xmlhttprequest':'xmlhttprequest'
     },
     plugins: [
         new UglifyJsPlugin({
