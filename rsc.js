@@ -5,6 +5,7 @@ if (isLocal) {
   var fs = require('fs');
   var AdmZip = require('adm-zip');
   var path = require('path');
+  var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 }
 
 class rsc {
@@ -1503,9 +1504,8 @@ class rsc {
       },
       rsc_import: isLocal ? (args) => {
         const mod = args.scope.block.fields.HEADER[0];
-        function requireSb3(zipFilePath) {
+        function getSb3(data) {
           try {
-            const data = fs.readFileSync(zipFilePath);
             const zip = new AdmZip(data);
             const projectJsonEntry = zip.getEntry('project.json');
 
@@ -1534,98 +1534,221 @@ class rsc {
           Tools.setreq([final.slice(7, final.length)]);
           return final;
         }
+        function syncfetch(url, type) {
+          var request = new XMLHttpRequest();
+          request.open("GET", url, false);
+          request.responseType = type;
+          request.send(null);
+          if (request.status === 200) {
+            return request.responseText;
+          }
+          console.log(request);
+          throw new Error('获取远程组件失败');
+        }
+        function requireMod(name, type, from) {
+          const modpath = pathtoMod(name);
+          const filePath = name + type;
+          Tools.setlibrary([`mod ${modpath};`]);
+          Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
+          const jsondata = from == 'local' ?
+            type == '.sb3' ? getSb3(fs.readFileSync(filePath)) : fs.readFileSync(filePath, 'utf-8') :
+            type == '.sb3' ? getSb3(syncfetch(filePath, 'arraybuffer')) : syncfetch(filePath, 'text');
+          const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(filePath).name, iflog);
+          let toreq = [];
+          reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
+          Tools.setreq(toreq);
+          Tools.setlibrary(reqlist);
+          Tools.setextrablockcompile(globalextrablocks);
+          Tools.setdepend(deplist);
+        }
+        function requireJs(name, from) {
+          const register = (ext) => {
+            if (!ext.blocks)
+              return;
+            if (!ext.id)
+              return;
+            ext.blocks.forEach(block => {
+              if (block.blockType != 'u') {
+                const func = ext[block.opcode];
+                const opcode = ext.id + '_' + block.opcode;
+                const type = block.blockType;
+                const startornot = block.blockStart;
+                extrablocks.push(opcode);
+                if (block.isOperator) {
+                  operatorlist.push(opcode);
+                }
+                switch (type) {
+                  case 'm': {
+                    compiles[opcode] = func;
+                    break;
+                  }
+                  case 'r': {
+                    inputscompiles[opcode] = func;
+                    inputlist.push(opcode);
+                    break;
+                  }
+                }
+                if (startornot)
+                  compileEvents.push(opcode);
+              }
+            });
+          }
+          const BlockType = {
+            COMMAND: 'm',
+            CONDITIONAL: 'm',
+            LOOP: 'm',
+            HAT: 'm',
+            REPORTER: 'r',
+            BOOLEAN: 'r',
+            LABEL: 'u',
+            XML: 'u',
+            BUTTON: 'u'
+          };
+          const extensions = { register };
+          const isCompiler = true;
+          const ext = new Function(from == 'local' ? fs.readFileSync(name + '.js').toString() : syncfetch(name, 'text'));
+          const ThrowError = (err) => {
+            throw new Error(err)
+          }
+          if (rscStorage?.config?.AllowThis)
+            ext.call({ rsc: this, fs, AdmZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+          else
+            ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+        }
         function requireLibs(name) {
-          if (name.includes('/')) {
-            const modpath = pathtoMod(name);
+          if (name.startsWith('.')) {
             if (fs.existsSync(name + '.json')) {
-              Tools.setlibrary([`mod ${modpath};`]);
-              Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
-              const jsonpath = name + '.json'
-              const jsondata = fs.readFileSync(jsonpath);
-              const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(jsonpath).name, iflog);
-              let toreq = [];
-              reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
-              Tools.setreq(toreq);
-              Tools.setlibrary(reqlist);
-              Tools.setextrablockcompile(globalextrablocks);//feat-编辑器内自定义扩展积木
-              Tools.setdepend(deplist);
+              requireMod(name, '.json', 'local');
             }
             else if (fs.existsSync(name + '.sb3')) {
-              const zipFilePath = name + '.sb3';
-              Tools.setlibrary([`mod ${modpath};`]);
-              Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
-              const jsondata = requireSb3(zipFilePath);
-              const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(zipFilePath).name, iflog);
-              let toreq = [];
-              reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
-              Tools.setreq(toreq);
-              Tools.setlibrary(reqlist);
-              Tools.setextrablockcompile(globalextrablocks);
-              Tools.setdepend(deplist);
+              requireMod(name, '.sb3', 'local');
             }
             else if (fs.existsSync(name + '.js')) {
-              const register = (ext) => {
-                if (!ext.blocks)
-                  return;
-                if (!ext.id)
-                  return;
-                ext.blocks.forEach(block => {
-                  if (block.blockType != 'u') {
-                    const func = ext[block.opcode];
-                    const opcode = ext.id + '_' + block.opcode;
-                    const type = block.blockType;
-                    const startornot = block.blockStart;
-                    extrablocks.push(opcode);
-                    if (block.isOperator) {
-                      operatorlist.push(opcode);
-                    }
-                    switch (type) {
-                      case 'm': {
-                        compiles[opcode] = func;
-                        break;
-                      }
-                      case 'r': {
-                        inputscompiles[opcode] = func;
-                        inputlist.push(opcode);
-                        break;
-                      }
-                    }
-                    if (startornot)
-                      compileEvents.push(opcode);
-                  }
-                });
-              }
-              const BlockType = {
-                COMMAND: 'm',
-                CONDITIONAL: 'm',
-                LOOP: 'm',
-                HAT: 'm',
-                REPORTER: 'r',
-                BOOLEAN: 'r',
-                LABEL: 'u',
-                XML: 'u',
-                BUTTON: 'u'
-              };
-              const extensions = { register };
-              const isCompiler = true;
-              const ext = new Function(fs.readFileSync(name + '.js').toString());
-              const ThrowError = (err) => {
-                throw new Error(err)
-              }
-              if (rscStorage?.config?.AllowThis)
-                ext.call({ rsc: this, fs, AdmZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
-              else
-                ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+              requireJs(name, 'local');
             }
           }
           else {
-            //feat-扩展仓库
+            if (name.startsWith('https://') || name.startsWith('http://')) {
+              if (name.endsWith('.json')) {
+                requireMod(name, 'web');
+              }
+              else if (name.endsWith('.sb3')) {
+                requireMod(name, 'web');
+              }
+              else if (name.endsWith('.js')) {
+                requireJs(name, 'web');
+              }
+            }
           }
         }
         requireLibs(mod);
         return args.compiler;
       } : () => {
-        //feat-扩展仓库
+        const mod = args.scope.block.fields.HEADER[0];
+        function pathtoMod(pathto) {
+          if (pathto.startsWith('./')) {
+            return pathto.slice(2, pathto.length).replace('/', '::');
+          }
+          if (pathto.startsWith('.') || pathto.endsWith('/') || pathto.endsWith('.sb3') || pathto.endsWith('.rs') || pathto.endsWith('.json') || pathto.endsWith('.js'))
+            throw new Error('引入地址错误');
+          let before = pathto.substring(0, pathto.indexOf('/'));
+          before = 'super::'.repeat(before.split('.').length - 2);
+          let after = pathto.substring(pathto.indexOf('/') + 1);
+          after = after.replace('/', '::');
+          const final = before + after;
+          Tools.setreq([final.slice(7, final.length)]);
+          return final;
+        }
+        function syncfetch(url, type) {
+          var request = new XMLHttpRequest();
+          request.open("GET", url, false);
+          request.responseType = type;
+          request.send(null);
+          if (request.status === 200) {
+            return request.responseText;
+          }
+          console.log(request);
+          throw new Error('获取远程组件失败');
+        }
+        function requireMod(name, type) {
+          const modpath = pathtoMod(name);
+          const filePath = name + type;
+          Tools.setlibrary([`mod ${modpath};`]);
+          Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
+          const jsondata = type == '.sb3' ? getSb3(syncfetch(filePath, 'arraybuffer')) : syncfetch(filePath, 'text');
+          const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(filePath).name, iflog);
+          let toreq = [];
+          reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
+          Tools.setreq(toreq);
+          Tools.setlibrary(reqlist);
+          Tools.setextrablockcompile(globalextrablocks);
+          Tools.setdepend(deplist);
+        }
+        function requireJs(name) {
+          const register = (ext) => {
+            if (!ext.blocks)
+              return;
+            if (!ext.id)
+              return;
+            ext.blocks.forEach(block => {
+              if (block.blockType != 'u') {
+                const func = ext[block.opcode];
+                const opcode = ext.id + '_' + block.opcode;
+                const type = block.blockType;
+                const startornot = block.blockStart;
+                extrablocks.push(opcode);
+                if (block.isOperator) {
+                  operatorlist.push(opcode);
+                }
+                switch (type) {
+                  case 'm': {
+                    compiles[opcode] = func;
+                    break;
+                  }
+                  case 'r': {
+                    inputscompiles[opcode] = func;
+                    inputlist.push(opcode);
+                    break;
+                  }
+                }
+                if (startornot)
+                  compileEvents.push(opcode);
+              }
+            });
+          }
+          const BlockType = {
+            COMMAND: 'm',
+            CONDITIONAL: 'm',
+            LOOP: 'm',
+            HAT: 'm',
+            REPORTER: 'r',
+            BOOLEAN: 'r',
+            LABEL: 'u',
+            XML: 'u',
+            BUTTON: 'u'
+          };
+          const extensions = { register };
+          const isCompiler = true;
+          const ext = new Function(syncfetch(name, 'text'));
+          const ThrowError = (err) => {
+            throw new Error(err)
+          }
+          if (rscStorage?.config?.AllowThis)
+            ext.call({ rsc: this, fs, AdmZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+          else
+            ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+        }
+        if (mod.startsWith('https://') || mod.startsWith('http://')) {
+          if (mod.endsWith('.json')) {
+            requireMod(mod, '.json');
+          }
+          else if (mod.endsWith('.sb3')) {
+            requireMod(mod, '.sb3');
+          }
+          else if (mod.endsWith('.js')) {
+            requireJs(mod);
+          }
+        }
         return args.compiler;
       },
       'rsc_func'(args) {

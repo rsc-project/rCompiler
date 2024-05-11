@@ -12,6 +12,8 @@
   "dependencies": {
     "adm-zip": "^0.5.10",
     "crc32": "^0.2.2",
+    "xhr2": "^0.2.1",
+    "xmlhttprequest": "^1.8.0",
     "yargs": "^17.7.2"
   },
   "bin": {
