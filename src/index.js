@@ -3,7 +3,7 @@ const { hideBin } = require('yargs/helpers');
 const rsc = require('./rsc');
 const fs = require('fs');
 const path = require('path');
-const AdmZip = require('adm-zip');
+const JSZip = require('jszip');
 const { spawn, exec } = require('child_process');
 const os = require('os');
 //const ProgressBar = require('progress')
@@ -126,15 +126,14 @@ async function rf(zipFilePath) {
       return JSON.parse(data.toString('utf-8'));
     } else {
       const data = fs.readFileSync(zipFilePath);
-      const zip = new AdmZip(data);
+      const zip = new JSZip();
+      await zip.loadAsync(data);
 
-      const projectJsonEntry = zip.getEntry('project.json');
-      if (!projectJsonEntry) {
+      const projectJson = await zip.file('project.json').async("string");
+      if (!projectJson) {
         throw new Error('不是有效的Scratch项目文件');
       }
-
-      const projectJsonContent = zip.readAsText(projectJsonEntry);
-      return JSON.parse(projectJsonContent);
+      return JSON.parse(projectJson);
     }
   } catch (error) {
     throw error;
@@ -180,8 +179,8 @@ async function comp(argv, mode) {
     }
 
     const compiler = new rsc();
-    if (mode == 't') var { deplist } = compiler.compile(jsonData, path.join(pathto, 'src'), path.parse(zipFilePath).name, true);
-    else var { deplist } = compiler.compile(jsonData, path.join(pathto, 'src'), path.parse(zipFilePath).name, false);
+    if (mode == 't') var { deplist } = await compiler.compile(jsonData, path.join(pathto, 'src'), path.parse(zipFilePath).name, true);
+    else var { deplist } = await compiler.compile(jsonData, path.join(pathto, 'src'), path.parse(zipFilePath).name, false);
 
     const cargotoml = [
       `# By r-Scratch-Compiler ${new Date().toISOString()} 🍥 v${compiler.version()}-${compiler.compilertype()}`,

@@ -1,9 +1,9 @@
 // Lingba Saner 🍥 24502-*
 const isLocal = typeof window === 'undefined';
 const crc32 = require('crc32');
+const JSZip = require('jszip');
 if (isLocal) {
   var fs = require('fs');
-  var AdmZip = require('adm-zip');
   var path = require('path');
   var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 }
@@ -15,7 +15,7 @@ class rsc {
   compilertype() {
     return 'stl';
   }
-  compile(jsonData, folderPath, fileName, iflog) {
+  async compile(jsonData, folderPath, fileName, iflog) {
     let rscStorage = null;
     if (jsonData.extensionStorage)
       if (jsonData.extensionStorage.rsc)
@@ -1044,12 +1044,12 @@ class rsc {
       }
     }
     const compiles = {
-      'event_whenflagclicked'(args) {
+      async 'event_whenflagclicked'(args) {
         flagcount++;
         starteventlist.push("flag" + flagcount);
         var comp = '';
         if (args.scope.block.next) {
-          comp = compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
+          comp = await compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
         }
         if (rscStorage?.project?.UnuseTokio)
           args.compiler += `fn flag${flagcount}(${selfmut ? '&mut self' : '&self'}){${inuselist.length == 0 ? '' : '\n'}${inuselist.join('\n') + '\n'}`;
@@ -1062,14 +1062,14 @@ class rsc {
         Tools.setfunc([args.compiler]);
         return args.compiler;
       },
-      'procedures_definition'(args) {
+      async 'procedures_definition'(args) {
         proccount++;
         hasreturn = false;
         rscfunc = '';
         let comp = '';
         procUsingArgList = [];
         if (args.scope.block.next) {
-          comp = compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
+          comp = await compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
         }
         let block_opcodes = [];
         procparselist.push(`proc${proccount}`);
@@ -1138,12 +1138,12 @@ class rsc {
         args.compiler += `self.${procname}(${result.join(',')})${args.scope.block.mutation.hasOwnProperty('return') ? (args.scope.block.mutation.return == '1' ? '' : ';\n') : ';\n'}`;
         return args.compiler;//aaa
       },
-      'control_start_as_clone'(args) {
+      async 'control_start_as_clone'(args) {
         clonecount++;
         var comp = '';
         clonevarlist = [];
         if (args.scope.block.next) {
-          comp = compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
+          comp = await compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
         }
         if (!notRepeatCloneList.includes(args.scope.target.name)) {
           Tools.setdepend([`async-recursion = "1.0.5"`]);
@@ -1427,11 +1427,11 @@ class rsc {
         args.compiler += `tokio::try_join!(${broadcastin.join(',')}).unwrap();`;
         return args.compiler;
       },
-      'event_whenbroadcastreceived'(args) {
+      async 'event_whenbroadcastreceived'(args) {
         var comp = '';
         const blockb = args.scope.block;
         if (args.scope.block.next) {
-          comp = compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
+          comp = await compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
           if (broadcastfuncs.hasOwnProperty(Cast.unParse(blockb.fields.BROADCAST_OPTION[0])))
             broadcastfuncs[Cast.unParse(blockb.fields.BROADCAST_OPTION[0])].push(comp);
           else
@@ -1439,14 +1439,14 @@ class rsc {
         }
         return args.compiler;
       },
-      'event_whenkeypressed'(args) {
+      async 'event_whenkeypressed'(args) {
         presscount++;
         var comp = '';
         var pressing = Cast.toPress(args.scope.block.fields.KEY_OPTION[0], args.scope.block);
         Tools.setlibrary(['use crossterm::event::{self, Event, KeyCode};']);
         Tools.setdepend(['crossterm = "0.27.0"']);
         if (args.scope.block.next) {
-          comp = compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
+          comp = await compile_this(args.scope.target.blocks[args.scope.block.next], args.scope.target);
         }
         args.compiler += `async fn press${presscount}(){\n`;
         args.compiler += [`loop {`,
@@ -1502,20 +1502,18 @@ class rsc {
         args.compiler += fn;
         return args.compiler;
       },
-      rsc_import: isLocal ? (args) => {
+      rsc_import: isLocal ? async (args) => {
         const mod = args.scope.block.fields.HEADER[0];
-        function getSb3(data) {
+        async function getSb3(data) {
           try {
-            const zip = new AdmZip(data);
-            const projectJsonEntry = zip.getEntry('project.json');
+            const zip = new JSZip();
+            await zip.loadAsync(data);
 
-            if (!projectJsonEntry) {
+            const projectJson = await zip.file('project.json').async("string");
+            if (!projectJson) {
               throw new Error('不是有效的Scratch项目文件');
             }
-
-            const projectJsonContent = projectJsonEntry.getData().toString('utf-8');
-            const projectJson = JSON.parse(projectJsonContent);
-            return projectJson;
+            return JSON.parse(projectJson);
           } catch (error) {
             throw error;
           }
@@ -1545,14 +1543,14 @@ class rsc {
           console.log(request);
           throw new Error('获取远程组件失败');
         }
-        function requireMod(name, type, from) {
+        async function requireMod(name, type, from) {
           const modpath = pathtoMod(name);
           const filePath = name + type;
           Tools.setlibrary([`mod ${modpath};`]);
           Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
           const jsondata = from == 'local' ?
-            type == '.sb3' ? getSb3(fs.readFileSync(filePath)) : fs.readFileSync(filePath, 'utf-8') :
-            type == '.sb3' ? getSb3(syncfetch(filePath, 'arraybuffer')) : syncfetch(filePath, 'text');
+            type == '.sb3' ? await getSb3(fs.readFileSync(filePath)) : fs.readFileSync(filePath, 'utf-8') :
+            type == '.sb3' ? await getSb3(syncfetch(filePath, 'arraybuffer')) : syncfetch(filePath, 'text');
           const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(filePath).name, iflog);
           let toreq = [];
           reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
@@ -1615,13 +1613,13 @@ class rsc {
           else
             ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
         }
-        function requireLibs(name) {
+        async function requireLibs(name) {
           if (name.startsWith('.')) {
             if (fs.existsSync(name + '.json')) {
-              requireMod(name, '.json', 'local');
+              await requireMod(name, '.json', 'local');
             }
             else if (fs.existsSync(name + '.sb3')) {
-              requireMod(name, '.sb3', 'local');
+              await requireMod(name, '.sb3', 'local');
             }
             else if (fs.existsSync(name + '.js')) {
               requireJs(name, 'local');
@@ -1630,10 +1628,10 @@ class rsc {
           else {
             if (name.startsWith('https://') || name.startsWith('http://')) {
               if (name.endsWith('.json')) {
-                requireMod(name, 'web');
+                await requireMod(name, 'web');
               }
               else if (name.endsWith('.sb3')) {
-                requireMod(name, 'web');
+                await requireMod(name, 'web');
               }
               else if (name.endsWith('.js')) {
                 requireJs(name, 'web');
@@ -1643,8 +1641,22 @@ class rsc {
         }
         requireLibs(mod);
         return args.compiler;
-      } : () => {
+      } : async () => {
         const mod = args.scope.block.fields.HEADER[0];
+        async function getSb3(data) {
+          try {
+            const zip = new JSZip();
+            await zip.loadAsync(data);
+
+            const projectJson = await zip.file('project.json').async("string");
+            if (!projectJson) {
+              throw new Error('不是有效的Scratch项目文件');
+            }
+            return JSON.parse(projectJson);
+          } catch (error) {
+            throw error;
+          }
+        }
         function pathtoMod(pathto) {
           if (pathto.startsWith('./')) {
             return pathto.slice(2, pathto.length).replace('/', '::');
@@ -1670,12 +1682,12 @@ class rsc {
           console.log(request);
           throw new Error('获取远程组件失败');
         }
-        function requireMod(name, type) {
+        async function requireMod(name, type) {
           const modpath = pathtoMod(name);
           const filePath = name + type;
           Tools.setlibrary([`mod ${modpath};`]);
           Tools.setlibrary([`use ${modpath}::Default as md_${Cast.keywordunParse(name)};`]);
-          const jsondata = type == '.sb3' ? getSb3(syncfetch(filePath, 'arraybuffer')) : syncfetch(filePath, 'text');
+          const jsondata = type == '.sb3' ? await getSb3(syncfetch(filePath, 'arraybuffer')) : syncfetch(filePath, 'text');
           const { deplist, globalextrablocks, reqlist } = new rsc().compile(jsondata, folderPath, path.parse(filePath).name, iflog);
           let toreq = [];
           reqlist.forEach(item => { if (item.startsWith('super::')) toreq.push(item.slice(7, item.length)) });
@@ -1740,10 +1752,10 @@ class rsc {
         }
         if (mod.startsWith('https://') || mod.startsWith('http://')) {
           if (mod.endsWith('.json')) {
-            requireMod(mod, '.json');
+            await requireMod(mod, '.json');
           }
           else if (mod.endsWith('.sb3')) {
-            requireMod(mod, '.sb3');
+            await requireMod(mod, '.sb3');
           }
           else if (mod.endsWith('.js')) {
             requireJs(mod);
@@ -1820,12 +1832,12 @@ class rsc {
     //入口
     find_vars();
     find_clones();
-    jsonData.targets.forEach(target => {
+    for (const target of jsonData.targets) {
       targetID++;
       if (target.blocks) {
-        start_compile_from_events(target);
+        await start_compile_from_events(target);
       }
-    });
+    }
     out += compile_main();
     if (runtimelist.length != 0) {
       out = runtimelist.join('\n') + '\n' + out;
@@ -2116,7 +2128,7 @@ class rsc {
         find(index);
       });
     }
-    function compile_input(block, target) {
+    async function compile_input(block, target) {
       const jsonObj = block.inputs;
       const inputs = {};
       for (let key in jsonObj) {
@@ -2153,30 +2165,30 @@ class rsc {
             const compblock = target.blocks[jsonObj[key][1]];
             if (compblock.opcode == 'procedures_call') {
               if (compblock.mutation.return) {
-                const comped = compile_input(compblock, target);
+                const comped = await compile_input(compblock, target);
                 inputs[key] = comped;
               }
               else {
-                const comped = compile_this(compblock, target);
+                const comped = await compile_this(compblock, target);
                 inputs[key] = comped;
               }
             }
             else
               if (inputlist.includes(compblock.opcode)) {
                 if (operatorlist.includes(compblock.opcode) && !operatorlist.includes(block.opcode)) {
-                  const compedToRemove = compile_input(compblock, target);
+                  const compedToRemove = await compile_input(compblock, target);
                   if (typeof compedToRemove == 'object')
                     if (compedToRemove.hasOwnProperty('input'))
                       compedToRemove.input = Cast.replaceParentheses(compedToRemove.input);
                   var comped = compedToRemove;
                 }
                 else {
-                  var comped = compile_input(compblock, target);
+                  var comped = await compile_input(compblock, target);
                 }
                 inputs[key] = comped;
               }
               else {
-                const comped = compile_this(compblock, target);
+                const comped = await compile_this(compblock, target);
                 inputs[key] = comped;
               }
           }
@@ -2185,7 +2197,7 @@ class rsc {
       if (block.opcode == 'procedures_call') {
         if (block.mutation.return) {
           inputs.scope = { block, target };
-          return inputscompiles[block.opcode](inputs);
+          return await inputscompiles[block.opcode](inputs);
         }
         else {
           return inputs;
@@ -2194,11 +2206,11 @@ class rsc {
       else
         if (inputscompiles.hasOwnProperty(block.opcode)) {
           inputs.scope = { block, target };
-          return inputscompiles[block.opcode](inputs);
+          return await inputscompiles[block.opcode](inputs);
         }
       return inputs;
     }
-    function compile(block, target) {
+    async function compile(block, target) {
       var compiler = '';
       if (!block) return '';
       if (block.opcode == 'rsc_ignore') {
@@ -2215,7 +2227,7 @@ class rsc {
             break;
           }
         }
-        var inputs = compile_input(block, target);
+        var inputs = await compile_input(block, target);
       }
       else {
         var inputs = {};
@@ -2223,7 +2235,7 @@ class rsc {
       if (compiles.hasOwnProperty(block.opcode)) {
         inputs.scope = { block, target };
         inputs.compiler = compiler;
-        compiler = compiles[block.opcode](inputs);
+        compiler = await compiles[block.opcode](inputs);
       }
       else {
         console.log(inputs);
@@ -2232,26 +2244,26 @@ class rsc {
       }
       return compiler;
     }
-    function compile_this(block, target) {
+    async function compile_this(block, target) {
       var compiler = '';
       while (true) {
-        compiler += compile(block, target);
+        compiler += await compile(block, target);
         if (block.next == null || compileEvents.includes(block.opcode)) break;
         else block = target.blocks[block.next];
       }
       return compiler;
     }
-    function start_compile_from_events(target) {
+    async function start_compile_from_events(target) {
       if (target.blocks && typeof target.blocks === 'object') {
         for (const opcode of compileEvents) {
           for (const blockId in target.blocks) {
             const block = target.blocks[blockId];
             if (block.opcode === opcode) {
-              compile_this(block, target);
+              await compile_this(block, target);
             }
           }
         }
-        compile_clones(target);
+        await compile_clones(target);
       }
       return;
     }
@@ -2277,13 +2289,13 @@ class rsc {
       clonecount = 0;
       return;
     }
-    function compile_clones(target) {
+    async function compile_clones(target) {
       if (target.blocks && typeof target.blocks === 'object') {
         for (let blockId in target.blocks) {
           let block = target.blocks[blockId];
           if (block.opcode == 'control_start_as_clone') {
             isclone = true;
-            compile_this(block, target);
+            await compile_this(block, target);
             isclone = false;
           }
         }

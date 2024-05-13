@@ -3,13 +3,12 @@ const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 
 module.exports = {
     mode: 'production',
-    entry: './rsc.js',
+    entry: './src/rsc.js',
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: 'rsc.min.js'
     },
     externals: {
-        'adm-zip': 'adm-zip',
         'fs': 'fs',
         'path': 'path',
         'xmlhttprequest':'xmlhttprequest'
