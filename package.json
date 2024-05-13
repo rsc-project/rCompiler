@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "build": "npx webpack"
+    "build": "npx webpack",
+    "pkg": "pkg ."
   },
   "author": "",
   "license": "ISC",
@@ -16,7 +17,7 @@
     "yargs": "^17.7.2"
   },
   "bin": {
-    "start": "index.js"
+    "start": "src/index.js"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",

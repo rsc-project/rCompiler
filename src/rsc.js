@@ -1976,8 +1976,8 @@ class rsc {
       }
     }
     function compile_main() {
-      var fn = `${haverscfunc ? 'pub ' : ''}struct Default{\n${structs.map(item => item[0] + ':' + item[1]).join(',\n')}\n}\n`;
-      fn += `impl Default{\n${haverscfunc ? 'pub ' : ''}fn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n')}\n}\n}\n${funcs.join('\n')}}\n`;
+      var fn = `${haverscfunc ? 'pub ' : ''}struct Default{\n${structs.map(item => item[0] + ':' + item[1]).join(',\n') || ''}}\n`;
+      fn += `impl Default{\n${haverscfunc ? 'pub ' : ''}fn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n') || ''}}\n}\n${funcs.join('\n')}}\n`;
       if (flagcount == 0) {
         fn += `fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}}`;
       }
