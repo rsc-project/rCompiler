@@ -1,12 +1,11 @@
-name: Release Package
+name: Daily Release
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '0 8 * * *'
 
 jobs:
-  release:
+  daily_release:
     runs-on: ubuntu-latest
     permissions: write-all
     
@@ -25,21 +24,20 @@ jobs:
     - name: Build package
       run: npm run build
       
-    - name: Get latest commit message
-      id: commit_msg
-      run: echo "::set-output name=message::$(git log -1 --pretty=format:'%s')"
-      
+    - name: Fetch all commits
+      id: get_commits
+      run: |
+        echo "::set-output name=commits::$(git log --pretty=format:"%h - %an, %ar : %s" --since="yesterday" --until="today")"
+
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: v1.0.${{ github.run_number }}
-        release_name: Release 1.0.${{ github.run_number }}
-        body: |
-          Changes in this release:
-          - ${{ steps.commit_msg.outputs.message }}
+        tag_name: ${{ format('{0}-{1}', github.run_number, steps.get_commits.outputs.date) }}
+        release_name: ${{ format('Release {0}', steps.get_commits.outputs.day_number) }}
+        body: ${{ steps.get_commits.outputs.commits }}
         draft: false
         prerelease: false
 
