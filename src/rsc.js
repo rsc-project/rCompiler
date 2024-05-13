@@ -205,10 +205,12 @@ class rsc {
       },
       setextrablockcompile(extin) {
         const register = (ext) => {
-          if (!ext.blocks)
+          if ((!ext.blocks || !ext.id) || !ext.getInfo)
             return;
-          if (!ext.id)
-            return;
+          if ((!ext.blocks || !ext.id)) {
+            const { id, blocks } = ext.getInfo();
+            ext = { ...ext, id, blocks };
+          }
           ext.blocks.forEach(block => {
             if (block.blockType != 'u') {
               const func = ext[block.opcode];
@@ -253,9 +255,9 @@ class rsc {
           throw new Error(err)
         }
         if (rscStorage?.config?.AllowThis)
-          ext.call({ rsc: this, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+          ext.call({ rsc: this, fs, JSZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
         else
-          ext.call({ TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+          ext.call({ JSZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
       }
     }
     var TypeInput = {
@@ -1561,10 +1563,12 @@ class rsc {
         }
         function requireJs(name, from) {
           const register = (ext) => {
-            if (!ext.blocks)
+            if ((!ext.blocks || !ext.id) || !ext.getInfo)
               return;
-            if (!ext.id)
-              return;
+            if ((!ext.blocks || !ext.id)) {
+              const { id, blocks } = ext.getInfo();
+              ext = { ...ext, id, blocks };
+            }
             ext.blocks.forEach(block => {
               if (block.blockType != 'u') {
                 const func = ext[block.opcode];
@@ -1609,9 +1613,9 @@ class rsc {
             throw new Error(err)
           }
           if (rscStorage?.config?.AllowThis)
-            ext.call({ rsc: this, fs, AdmZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+            ext.call({ rsc: this, fs, JSZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
           else
-            ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+            ext.call({ JSZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
         }
         async function requireLibs(name) {
           if (name.startsWith('.')) {
@@ -1698,10 +1702,12 @@ class rsc {
         }
         function requireJs(name) {
           const register = (ext) => {
-            if (!ext.blocks)
+            if ((!ext.blocks || !ext.id) || !ext.getInfo)
               return;
-            if (!ext.id)
-              return;
+            if ((!ext.blocks || !ext.id)) {
+              const { id, blocks } = ext.getInfo();
+              ext = { ...ext, id, blocks };
+            }
             ext.blocks.forEach(block => {
               if (block.blockType != 'u') {
                 const func = ext[block.opcode];
@@ -1746,9 +1752,9 @@ class rsc {
             throw new Error(err)
           }
           if (rscStorage?.config?.AllowThis)
-            ext.call({ rsc: this, fs, AdmZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+            ext.call({ rsc: this, fs, JSZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
           else
-            ext.call({ TypeInput, path, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
+            ext.call({ JSZip, path, TypeInput, Cast, Tools, compile_this, BlockType, extensions, isCompiler, ThrowError });
         }
         if (mod.startsWith('https://') || mod.startsWith('http://')) {
           if (mod.endsWith('.json')) {
