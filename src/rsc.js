@@ -1504,6 +1504,16 @@ class rsc {
         args.compiler += fn;
         return args.compiler;
       },
+      'rsc_flaguse'(args){
+        const name = args.scope.block.fields.from[0];
+        if (name != '') {
+          const from = 'm_' + Cast.keywordunParse(name);
+          Tools.setstruct([[from, `md_${Cast.keywordunParse(args.scope.block.fields.from[0])}`, `md_${Cast.keywordunParse(args.scope.block.fields.from[0])}::new()`]]);
+          args.compiler += `self.${from}.runflag();\n`;
+        }
+        else args.compiler += `self.runflag();\n`;
+        return args.compiler;
+      },
       rsc_import: isLocal ? async (args) => {
         const mod = args.scope.block.fields.HEADER[0];
         async function getSb3(data) {
@@ -1977,21 +1987,22 @@ class rsc {
     }
     function compile_main() {
       var fn = `${haverscfunc ? 'pub ' : ''}struct Default{\n${structs.map(item => item[0] + ':' + item[1]).join(',\n') || ''}}\n`;
-      fn += `impl Default{\n${haverscfunc ? 'pub ' : ''}fn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n') || ''}}\n}\n${funcs.join('\n')}}\n`;
+      fn += `impl Default{\n${haverscfunc ? 'pub ' : ''}fn new() -> Default{\nDefault{\n${structs.map(item => item[0] + ':' + item[2]).join(',\n') || ''}}\n}\n${funcs.join('\n')}`;
+      haverscfunc ? fn += 'pub ' : fn += '';
       if (flagcount == 0) {
-        fn += `fn main(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}}`;
+        fn += `fn runflag(){\n${mainlist.length == 0 ? '' : mainlist.join('\n')}}`;
       }
       else if (flagcount == 1) {
         if (rscStorage?.project?.UnuseTokio)
-          fn += `fn main(){\nlet ${selfmut ? 'mut ' : ''}init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}init.flag1();\n}`;
+          fn += `fn runflag(){\nlet ${selfmut ? 'mut ' : ''}init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}init.flag1();\n}`;
         else {
           Tools.setdepend([`tokio = { version = "1", features = ["full"] }`]);
-          fn += `#[tokio::main]\nasync fn main(){\nlet ${selfmut ? 'mut ' : ''}init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}init.flag1().await;\n}`;
+          fn += `async fn runflag(){\nlet ${selfmut ? 'mut ' : ''}init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}init.flag1().await;\n}`;
         }
       }
       else {
         if (rscStorage?.project?.UnuseTokio) {
-          fn += `fn main(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
+          fn += `fn runflag(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
           let i = -1;
           starteventlist.forEach(function (info) {
             i++;
@@ -2000,8 +2011,7 @@ class rsc {
           fn += '}';
         }
         else {
-          Tools.setdepend([`tokio = { version = "1", features = ["full"] }`]);
-          fn += `#[tokio::main]\nasync fn main(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
+          fn += `async fn runflag(){\nlet init = Default::new();\n${mainlist.length == 0 ? '' : mainlist.join('\n')}`;
           let tasks = [];
           let i = -1;
           starteventlist.forEach(function (info) {
@@ -2011,6 +2021,18 @@ class rsc {
           let task = tasks.join(',');
           fn += `tokio::join!(${task});\n`
           fn += '}';
+        }
+      }
+      fn += '\n}\n';
+      if (flagcount == 0) {
+        fn += `fn main(){\n}`;
+      }
+      else if (flagcount == 1) {
+        if (rscStorage?.project?.UnuseTokio)
+          fn += `fn main(){\nDefault::runflag();\n}`;
+        else {
+          Tools.setdepend([`tokio = { version = "1", features = ["full"] }`]);
+          fn += `#[tokio::main]\nasync fn main(){\nDefault::runflag().await;\n}`;
         }
       }
       return fn;

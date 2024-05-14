@@ -28,11 +28,14 @@ Default{
 async fn flag1(&self){
 println!("{}","Hello, World!");
 }
+async fn runflag(){
+let init = Default::new();
+init.flag1().await;
+}
 }
 #[tokio::main]
 async fn main(){
-let init = Default::new();
-init.flag1().await;
+Default::runflag().await;
 }'
 ```
 
